@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz: História do Brasil</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SignalR Client da Microsoft -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <!-- Fontes clássicas -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Merriweather', serif;
+            background-color: #2c1810;
+            background-image: radial-gradient(circle, #3d2317 0%, #1a0e09 100%);
+            color: #f3e5ab;
+        }
+        h1, h2, h3, .font-title {
+            font-family: 'Cinzel', serif;
+        }
+        .pergaminho {
+            background-color: #f4ebd0;
+            color: #2b1d0c;
+            border: 4px solid #8c6d46;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+        }
+        .opcao-btn {
+            background-color: #e6d7b8;
+            border: 2px solid #8c6d46;
+            transition: all 0.2s;
+        }
+        .opcao-btn:hover {
+            background-color: #d4c29a;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-2xl pergaminho rounded-xl p-8 relative">
+        <!-- Cabeçalho -->
+        <header class="text-center border-b-2 border-[#8c6d46] pb-4 mb-6">
+            <h1 class="text-3xl font-bold tracking-wider text-[#4a2e18]">Império do Saber</h1>
+            <p class="text-sm italic text-[#705233]">Desafio de História do Brasil</p>
+        </header>
+
+        <!-- 1. Tela Inicial / Menu -->
+        <div id="menu-screen" class="space-y-6 text-center">
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2 text-[#4a2e18]">Seu Nome de Nobreza / Jogador:</label>
+                <input type="text" id="player-name" placeholder="Ex: Dom Pedro II" class="w-full p-3 rounded border border-[#8c6d46] bg-[#fcf8ec] text-center font-semibold text-lg focus:outline-none focus:ring-2 focus:ring-[#8c6d46]">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button onclick="createRoom()" class="bg-[#4a2e18] text-[#f3e5ab] font-bold py-3 px-6 rounded-lg shadow hover:bg-[#321e0f] transition border border-[#8c6d46]">
+                    👑 Criar Sala
+                </button>
+                <button onclick="openJoinModal()" class="bg-[#8c6d46] text-[#f3e5ab] font-bold py-3 px-6 rounded-lg shadow hover:bg-[#735735] transition border border-[#4a2e18]">
+                    ⚔️ Entrar em Sala
+                </button>
+            </div>
+            <div id="connection-status" class="text-xs italic text-[#705233] mt-2">Conectando ao servidor C#...</div>
+        </div>
+
+        <!-- 2. Tela do Lobby (Aguardando Jogadores) -->
+        <div id="lobby-screen" class="hidden space-y-6">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold text-[#4a2e18]">Sala de Reunião</h2>
+                <p class="text-sm text-[#705233]">Código da Sala: <span id="room-code-display" class="font-mono font-bold text-lg text-red-900"></span></p>
+            </div>
+            
+            <div class="bg-[#e6d7b8] p-4 rounded-lg border border-[#c4b087]">
+                <h3 class="font-bold mb-2 text-[#4a2e18]">Participantes na Sala:</h3>
+                <ul id="player-list" class="space-y-2">
+                    <!-- Preenchido via JS -->
+                </ul>
+            </div>
+
+            <div id="host-controls" class="text-center hidden">
+                <button onclick="startGame()" class="bg-green-800 text-white font-bold py-3 px-8 rounded-lg shadow hover:bg-green-900 transition">
+                    Iniciar Partida
+                </button>
+            </div>
+            <div id="waiting-host-msg" class="text-center text-sm italic text-[#705233]">
+                Aguardando o líder iniciar a partida...
+            </div>
+        </div>
+
+        <!-- 3. Tela de Perguntas (Quiz) -->
+        <div id="quiz-screen" class="hidden space-y-6">
+            <div class="flex justify-between items-center border-b border-[#8c6d46] pb-2">
+                <span id="question-counter" class="text-sm font-bold text-[#705233]">Questão 1 de 10</span>
+                <span id="timer" class="font-mono font-bold text-lg text-red-900">⏱️ 15s</span>
+            </div>
+
+            <div>
+                <span id="question-period" class="text-xs uppercase tracking-widest font-bold text-[#8c6d46] bg-[#e6d7b8] px-2 py-1 rounded">Período Colonial</span>
+                <h2 id="question-statement" class="text-xl font-bold text-[#4a2e18] mt-3">Carregando questão histórica...</h2>
+            </div>
+
+            <div id="options-container" class="space-y-3">
+                <!-- Botões de Opções injetados via JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Entrar em Sala -->
+    <div id="join-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center p-4">
+        <div class="pergaminho w-full max-w-md rounded-xl p-6 relative space-y-4">
+            <h3 class="text-xl font-bold text-[#4a2e18] text-center">Entrar em Sala Existente</h3>
+            <div>
+                <label class="block text-sm font-bold mb-1 text-[#4a2e18]">Código da Sala (Ex: BR-123):</label>
+                <input type="text" id="room-code-input" placeholder="BR-XXX" class="w-full p-2 rounded border border-[#8c6d46] bg-[#fcf8ec] uppercase text-center font-bold">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeJoinModal()" class="bg-gray-400 text-white px-4 py-2 rounded font-bold hover:bg-gray-500">Cancelar</button>
+                <button onclick="joinRoom()" class="bg-[#4a2e18] text-[#f3e5ab] px-4 py-2 rounded font-bold hover:bg-[#321e0f]">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Banco local de perguntas de História do Brasil para exibição interativa
+        const questionsDB = [
+            { period: "Período Colonial", statement: "Quem foi o navegador português responsável por liderar a esquadra que chegou ao Brasil em 1500?", options: ["Cristovão Colombo", "Pedro Álvares Cabral", "Vasco da Gama", "Américo Vespúcio"], correct: 1 },
+            { period: "Inconfidência Mineira", statement: "Qual era o principal objetivo dos conjurados na Inconfidência Mineira de 1789?", options: ["Abolir a escravidão imediatamente", "Tornar o Brasil uma monarquia independente", "Separar Minas Gerais de Portugal e proclamar uma república", "Aumentar os impostos sobre o ouro"], correct: 2 },
+            { period: "Independência", statement: "Em que data exata foi formalmente declarada a Independência do Brasil às margens do rio Ipiranga?", options: ["22 de abril de 1500", "7 de setembro de 1822", "15 de novembro de 1889", "13 de maio de 1888"], correct: 1 }
+        ];
+
+        let currentQuestionIndex = 0;
+        let timerInterval;
+        let timeLeft = 15;
+
+        // Conexão SignalR com o seu backend C#
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("https://localhost:5001/quizHub")
+            .withAutomaticReconnect()
+            .build();
+
+        let currentRoomCode = "";
+        let myName = "";
+
+        connection.start().then(() => {
+            document.getElementById("connection-status").innerText = "Conectado ao servidor C# com sucesso!";
+            document.getElementById("connection-status").classList.add("text-green-800");
+        }).catch(err => {
+            document.getElementById("connection-status").innerText = "Erro ao conectar ao servidor C# (Verifique se ele está rodando).";
+            document.getElementById("connection-status").classList.add("text-red-800");
+            console.error(err);
+        });
+
+        function getPlayerName() {
+            const name = document.getElementById("player-name").value.trim();
+            if (!name) {
+                alert("Por favor, insira o seu nome de jogador!");
+                return null;
+            }
+            return name;
+        }
+
+        function createRoom() {
+            myName = getPlayerName();
+            if (!myName) return;
+            connection.invoke("CreateRoom", myName).catch(err => console.error(err));
+        }
+
+        function openJoinModal() {
+            myName = getPlayerName();
+            if (!myName) return;
+            document.getElementById("join-modal").classList.remove("hidden");
+        }
+
+        function closeJoinModal() {
+            document.getElementById("join-modal").classList.add("hidden");
+        }
+
+        function joinRoom() {
+            const code = document.getElementById("room-code-input").value.trim();
+            if (!code) {
+                alert("Insira o código da sala.");
+                return;
+            }
+            connection.invoke("JoinRoom", code, myName).catch(err => console.error(err));
+        }
+
+        function startGame() {
+            connection.invoke("StartGame", currentRoomCode).catch(err => console.error(err));
+        }
+
+        // --- Eventos do Servidor C# ---
+
+        connection.on("RoomCreated", (roomCode, players) => {
+            currentRoomCode = roomCode;
+            showLobby(roomCode, players);
+            document.getElementById("host-controls").classList.remove("hidden");
+            document.getElementById("waiting-host-msg").classList.add("hidden");
+        });
+
+        connection.on("JoinedRoomSuccess", (roomCode, players) => {
+            currentRoomCode = roomCode;
+            closeJoinModal();
+            showLobby(roomCode, players);
+        });
+
+        connection.on("UpdatePlayerList", (players) => {
+            updatePlayersUI(players);
+        });
+
+        connection.on("ErrorMessage", (msg) => {
+            alert(msg);
+        });
+
+        // Este é o gatilho que muda a tela para o Quiz quando o C# avisa que o jogo começou!
+        connection.on("GameStarted", () => {
+            document.getElementById("lobby-screen").classList.add("hidden");
+            document.getElementById("quiz-screen").classList.remove("hidden");
+            loadQuestion();
+        });
+
+        function showLobby(roomCode, players) {
+            document.getElementById("menu-screen").classList.add("hidden");
+            document.getElementById("lobby-screen").classList.remove("hidden");
+            document.getElementById("room-code-display").innerText = roomCode;
+            updatePlayersUI(players);
+        }
+
+        function updatePlayersUI(players) {
+            const list = document.getElementById("player-list");
+            list.innerHTML = "";
+            players.forEach(p => {
+                const li = document.createElement("li");
+                li.className = "flex justify-between items-center p-2 bg-[#f4ebd0] rounded border border-[#c4b087]";
+                li.innerHTML = `<span>${p.name} ${p.isHost ? '👑' : ''}</span> <span class="text-xs italic text-[#705233]">${p.score} pts</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIndex >= questionsDB.length) {
+                alert("Fim do Quiz! Parabéns por concluir os desafios históricos.");
+                return;
+            }
+
+            const q = questionsDB[currentQuestionIndex];
+            document.getElementById("question-counter").innerText = `Questão ${currentQuestionIndex + 1} de ${questionsDB.length}`;
+            document.getElementById("question-period").innerText = q.period;
+            document.getElementById("question-statement").innerText = q.statement;
+
+            const container = document.getElementById("options-container");
+            container.innerHTML = "";
+
+            q.options.forEach((opt, index) => {
+                const btn = document.createElement("button");
+                btn.className = "w-full text-left p-3 rounded-lg font-semibold opcao-btn text-[#4a2e18]";
+                btn.innerText = opt;
+                btn.onclick = () => submitAnswer(index, q.correct);
+                container.appendChild(btn);
+            });
+
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timeLeft = 15;
+            document.getElementById("timer").innerText = `⏱️ ${timeLeft}s`;
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById("timer").innerText = `⏱️ ${timeLeft}s`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    alert("Tempo esgotado!");
+                    nextQuestion();
+                }
+            }, 1000);
+        }
+
+        function submitAnswer(selectedIndex, correctIndex) {
+            clearInterval(timerInterval);
+            if (selectedIndex === correctIndex) {
+                alert("Resposta Correta! 🌟");
+                // Envia pontuação para o backend C#
+                connection.invoke("SubmitAnswer", currentRoomCode, selectedIndex, timeLeft).catch(err => console.error(err));
+            } else {
+                alert("Resposta Incorreta! ❌");
+            }
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            loadQuestion();
+        }
+    </script>
+</body>
+</html>
